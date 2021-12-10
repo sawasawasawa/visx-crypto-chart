@@ -1,6 +1,14 @@
-.inputs > * {
+.inputs > *:first-child,
+.inputs > *:last-child {
   display: flex;
   flex-direction: column;
+  margin-right: 50px;
+  color: white;
+}
+
+.inputs > *:nth-child(2) {
+  display: flex;
+  flex-direction: row;
   margin-right: 50px;
   color: white;
 }

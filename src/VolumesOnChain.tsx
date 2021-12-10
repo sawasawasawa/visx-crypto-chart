@@ -1,18 +1,12 @@
 import React from "react";
 import { BarStackHorizontal } from "@visx/shape";
-import { SeriesPoint } from "@visx/shape/lib/types";
 import { Group } from "@visx/group";
-import { AxisBottom, AxisLeft } from "@visx/axis";
 import cityTemperature, {
   CityTemperature,
 } from "@visx/mock-data/lib/mocks/cityTemperature";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
 import { timeParse, timeFormat } from "d3-time-format";
-import { withTooltip, Tooltip, defaultStyles } from "@visx/tooltip";
-import { WithTooltipProvidedProps } from "@visx/tooltip/lib/enhancers/withTooltip";
-import { LegendOrdinal } from "@visx/legend";
-
-type CityName = "New York" | "San Francisco" | "Austin";
+import { defaultStyles } from "@visx/tooltip";
 
 export type BarStackHorizontalProps = {
   width: number;
@@ -21,8 +15,6 @@ export type BarStackHorizontalProps = {
   events?: boolean;
 };
 
-const purple1 = "#6c5efb";
-const purple2 = "#c998ff";
 export const purple3 = "#a44afe";
 export const background = "#eaedff";
 const defaultMargin = { top: 110, left: 50, right: 40, bottom: 0 };
@@ -34,7 +26,6 @@ const tooltipStyles = {
 };
 
 const data = cityTemperature.slice(0, 12);
-console.log("_______ data", data);
 const keys = Object.keys(data[0]).filter((d) => d !== "date") as CityName[];
 
 const temperatureTotals = data.reduce((allTotals, currentDate) => {
@@ -69,9 +60,9 @@ const dateScale = scaleBand<string>({
   padding: 0.2,
 });
 
-const colorScale = scaleOrdinal<CityName, string>({
+const colorScale = scaleOrdinal<[], string>({
   domain: keys,
-  range: ["rgba(0,255, 0,0.5)", "rgba(255, 0, 0,0.5)", purple3],
+  range: ["rgba(0,255, 0,0.5)", "rgba(255, 0, 0,0.5)"],
 });
 
 let tooltipTimeout: number;
@@ -92,53 +83,32 @@ export default ({
     padding: 0.8,
   });
   const volumeScale = scaleLinear<number>({
-    // domain: [0, Math.max(...data.map(v=>v.totalBuyVolume+v.totalSellVolume))],
     domain: [0, Math.max(...data.map((v) => v.totalToBtc + v.totalFromBtc))],
     nice: true,
   });
-  console.log("_______ data", data);
   volumeScale.rangeRound([0, xMax]);
   bucketsScale.rangeRound([yMax, 0]);
   temperatureScale.rangeRound([0, xMax]);
   dateScale.rangeRound([yMax, 0]);
   const maxx = Math.max(...data.map((v) => v.totalToBtc + v.totalFromBtc));
   return width < 10 ? null : (
-    <svg
-      width={width}
-      height={height}
-      x={xPosition}
-      y={0}
-      transform={"scale(-1 -1)"}
-    >
-      {/*<rect width={width} height={height} fill={background} rx={14} />*/}
+    <svg width={width} height={height} x={xPosition} y={0}>
       <Group top={margin.top} left={margin.left}>
         <BarStackHorizontal<any, "totalBuyVolume">
-          // x0={(d) => {
-          //     console.log("_______ d", d)
-          //     return maxx - (d.data.totalFromBtc + d.data.totalToBtc);
-          // }}
-          // x1={(d) => maxx -  d.data.totalToBtc}
           height={yMax}
           keys={keys}
           data={data}
           y={getBucket}
           xScale={volumeScale}
           yScale={bucketsScale}
-          // yScale={parentYScale}
           color={colorScale}
         >
           {(barStacks) =>
             barStacks.map((barStack) =>
               barStack.bars.map((bar) => {
-                console.log(
-                  "_______ bar",
-                  volumeScale(bar.bar[0] + bar.bar[1])
-                );
                 const offset = volumeScale(maxx - (bar.bar[0] + bar.bar[1]));
                 return (
                   <rect
-                    // transform={`translateX(${maxx - (bar.data.totalFromBtc + bar.data.totalToBtc)})`}
-
                     key={`barstack-horizontal-${barStack.index}-${bar.index}`}
                     x={bar.x + offset}
                     y={bar.y}

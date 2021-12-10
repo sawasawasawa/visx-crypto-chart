@@ -11,15 +11,12 @@ import { LinearGradient } from "@visx/gradient";
 import { max, extent, min } from "d3-array";
 import groupBy from "lodash/groupBy";
 import sortBy from "lodash/sortBy";
-// import csv from "../assets/SBT_DataVisualization/price_BTC.csv"
 import * as d3 from "d3";
 
 import AreaChart from "./AreaChart";
 import Volumes from "./Volumes";
 import { useWindowSize } from "react-use-size";
 import VolumesOnChain from "./VolumesOnChain";
-
-// Initialize some variables
 
 interface Price {
   date: string;
@@ -38,14 +35,18 @@ const parseVolumeData = async (path: string) => {
 const btcPrices = await parsePriceData(
   "../assets/SBT_DataVisualization/price_BTC.csv"
 );
+const ethPrices = await parsePriceData(
+  "../assets/SBT_DataVisualization/price_ETH.csv"
+);
 const btcVolumes = await parseVolumeData(
   "../assets/SBT_DataVisualization/buy_sell_volume_BTC.csv"
+);
+const ethVolumes = await parseVolumeData(
+  "../assets/SBT_DataVisualization/buy_sell_volume_ETH.csv"
 );
 const onChainVolumes = await parseVolumeData(
   "../assets/SBT_DataVisualization/on_chain_ETH_BTC.csv"
 );
-
-const onChainBtc = onChainVolumes.filter((v) => v.asset === "BTC");
 
 const brushMargin = { top: 10, bottom: 15, left: 50, right: 20 };
 const chartSeparation = 30;
@@ -69,11 +70,10 @@ export type BrushProps = {
   margin?: { top: number; right: number; bottom: number; left: number };
   compact?: boolean;
 };
+const defaultAsset = "BTC";
 
 function Chart({
   compact = false,
-  // width,
-  // height,
   margin = {
     top: 120,
     left: 50,
@@ -82,22 +82,22 @@ function Chart({
   },
 }: BrushProps) {
   const brushRef = useRef<BaseBrush | null>(null);
-  const [filteredStock, setFilteredStock] = useState(btcPrices);
-  const [asset, setAsset] = useState("BTC");
+  const [asset, setAsset] = useState(defaultAsset);
+  const prices = asset === "BTC" ? btcPrices : ethPrices;
+  const [filteredStock, setFilteredStock] = useState(prices);
   const windowSize = useWindowSize();
   const width = windowSize.width - 100;
   const height = windowSize.height - 150;
   const onBrushChange = (domain: Bounds | null) => {
     if (!domain) return;
     const { x0, x1, y0, y1 } = domain;
-    const stockCopy = btcPrices.filter((s) => {
+    const stockCopy = prices.filter((s) => {
       const x = getDate(s).getTime();
       const y = getAssetValue(s);
       return x > x0 && x < x1 && y > y0 && y < y1;
     });
     setFilteredStock(stockCopy);
   };
-  console.log("_______ filteredStock.length", filteredStock.length);
   const innerHeight = height - margin.top - margin.bottom;
   const topChartBottomMargin = compact
     ? chartSeparation / 2
@@ -139,41 +139,39 @@ function Chart({
     () =>
       scaleTime<number>({
         range: [0, xBrushMax],
-        domain: extent(btcPrices, getDate) as [Date, Date],
+        domain: extent(prices, getDate) as [Date, Date],
       }),
-    [xBrushMax]
+    [xBrushMax, asset]
   );
   const brushStockScale = useMemo(
     () =>
       scaleLinear({
         range: [yBrushMax, 0],
         domain: [
-          min(btcPrices, getAssetValue) || 0,
-          max(btcPrices, getAssetValue) || 0,
+          min(prices, getAssetValue) || 0,
+          max(prices, getAssetValue) || 0,
         ],
         nice: true,
       }),
-    [yBrushMax]
+    [yBrushMax, asset]
   );
 
   // Compute bins.
   const thresholds = filteredStock.length;
-  const x = (d) => d.close;
-  const y = (d) => d.volume_buy;
-  const X = d3.map(btcPrices, x);
-  const Y = d3.map(btcVolumes, y);
-  const I = d3.range(X.length);
   const bins2 = d3.bin().thresholds(thresholds)(
     filteredStock.map((b) => b.close)
   );
-  console.log("_______ bins2.length", bins2.length);
   const volumesPerBin = bins2.map((bin) => {
     const binItems = filteredStock
       .filter((p) => {
         const close = parseInt(p.close, 10);
         return bin.x0 <= close && close < bin.x1;
       })
-      .map((p) => btcVolumes.find((v) => v.time_executed === p.date));
+      .map((p) =>
+        (asset === "BTC" ? btcVolumes : ethVolumes).find(
+          (v) => v.time_executed === p.date
+        )
+      );
 
     return {
       x0: bin.x0,
@@ -182,13 +180,10 @@ function Chart({
       totalBuyVolume: d3.sum(binItems.map((item) => item.volume_buy)),
     };
   });
-  console.log("_______ volumesPerBin", volumesPerBin);
   const sortedVolumes = sortBy(
     volumesPerBin,
     (v) => v.totalBuyVolume + v.totalSellVolume
   ).reverse();
-
-  console.log("_______ sortedVolumes", sortedVolumes);
 
   const dailyVolumes = Object.entries(groupBy(onChainVolumes, (d) => d.ts)).map(
     ([date, entries]) => ({ date, entries })
@@ -197,8 +192,9 @@ function Chart({
   const Supports = ({ data, count = 1, color = "white", y = 0 }) =>
     data
       .slice(0, count)
-      .map((d) => (
+      .map((d, i) => (
         <line
+          key={i}
           x1={margin.right + 30}
           y1={y + margin.top + stockScale(d.x1)}
           y2={y + margin.top + stockScale(d.x1)}
@@ -218,34 +214,43 @@ function Chart({
         return bin.x0 <= dailyClose && dailyClose < bin.x1;
       })
       .flatMap(({ entries }) => [...entries]);
-    const toItems = binItems.filter(
+    const toBtcItems = binItems.filter(
       (v) =>
         v.metric === "transfers_volume_to_exchanges_sum" && v.asset === "BTC"
     );
-    const fromItems = binItems.filter(
+    const fromBtcItems = binItems.filter(
       (v) =>
         v.metric === "transfers_volume_from_exchanges_sum" && v.asset === "BTC"
+    );
+    const toEthItems = binItems.filter(
+      (v) =>
+        v.metric === "transfers_volume_to_exchanges_sum" && v.asset === "ETH"
+    );
+    const fromEthItems = binItems.filter(
+      (v) =>
+        v.metric === "transfers_volume_from_exchanges_sum" && v.asset === "ETH"
     );
 
     return {
       x0: bin.x0,
       x1: bin.x1,
       date: bin,
-      totalToBtc: d3.sum(toItems.map((item) => parseInt(item.value))),
-      totalFromBtc: d3.sum(fromItems.map((item) => parseInt(item.value))),
+      totalToBtc: d3.sum(toBtcItems.map((item) => parseInt(item.value))),
+      totalFromBtc: d3.sum(fromBtcItems.map((item) => parseInt(item.value))),
+      totalToEth: d3.sum(toEthItems.map((item) => parseInt(item.value))),
+      totalFromEth: d3.sum(fromEthItems.map((item) => parseInt(item.value))),
     };
   });
-  console.log("_______ onChainVolumesPerBin", onChainVolumesPerBin);
+
   const sortedOnChainVolumes = sortBy(
     onChainVolumesPerBin,
     (v) => v.totalToBtc + v.totalFromBtc
   ).reverse();
-  console.log("_______ sortedOnChainVolumes", sortedOnChainVolumes);
 
   const initialBrushPosition = useMemo(
     () => ({
-      start: { x: brushDateScale(getDate(btcPrices[50])) },
-      end: { x: brushDateScale(getDate(btcPrices[100])) },
+      start: { x: brushDateScale(getDate(prices[50])) },
+      end: { x: brushDateScale(getDate(prices[100])) },
     }),
     [brushDateScale]
   );
@@ -253,29 +258,8 @@ function Chart({
   // event handlers
   const handleClearClick = () => {
     if (brushRef?.current) {
-      setFilteredStock(btcPrices);
+      setFilteredStock(prices);
       brushRef.current.reset();
-    }
-  };
-
-  const handleResetClick = () => {
-    if (brushRef?.current) {
-      const updater: UpdateBrush = (prevBrush) => {
-        const newExtent = brushRef.current!.getExtent(
-          initialBrushPosition.start,
-          initialBrushPosition.end
-        );
-
-        const newState: BaseBrushState = {
-          ...prevBrush,
-          start: { y: newExtent.y0, x: newExtent.x0 },
-          end: { y: newExtent.y1, x: newExtent.x1 },
-          extent: newExtent,
-        };
-
-        return newState;
-      };
-      brushRef.current.updateBrush(updater);
     }
   };
 
@@ -311,11 +295,24 @@ function Chart({
             value={supportsLeft}
             onChange={(e) => setSupportsLeft(parseInt(e.target?.value))}
           />
-        </div>
 
+          <span></span>
+        </div>
+        <div
+          onClick={() => {
+            setAsset((s) => {
+              setFilteredStock(s === "ETH" ? btcPrices : ethPrices);
+              return s === "BTC" ? "ETH" : "BTC";
+            });
+          }}
+        >
+          <h1 style={{ opacity: asset === "BTC" ? 1 : 0.2 }}>BTC</h1>
+          <h1 style={{ opacity: 0.2 }}>/</h1>
+          <h1 style={{ opacity: asset === "ETH" ? 1 : 0.2 }}>ETH</h1>
+        </div>
         <div>
           <label htmlFor="supportsRight">
-            Buy/Sell Volume Supports: {supportsRight}
+            From/To On Chain Supports: {supportsRight}
           </label>
           <input
             id="supportsRight"
@@ -362,7 +359,7 @@ function Chart({
         <AreaChart
           hideBottomAxis
           hideLeftAxis
-          data={btcPrices}
+          data={prices}
           width={width}
           yMax={yBrushMax}
           xScale={brushDateScale}
@@ -391,7 +388,7 @@ function Chart({
             brushDirection="horizontal"
             initialBrushPosition={initialBrushPosition}
             onChange={onBrushChange}
-            onClick={() => setFilteredStock(btcPrices)}
+            onClick={() => setFilteredStock(prices)}
             selectedBoxStyle={selectedBrushStyle}
             useWindowMoveEvents
           />
@@ -431,6 +428,7 @@ function Chart({
       </svg>
       <button
         onClick={handleClearClick}
+        disabled={!brushRef?.current}
         style={{ margin: "auto", display: "block", marginTop: 30 }}
       >
         Reset Selection
