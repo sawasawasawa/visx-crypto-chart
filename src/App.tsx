@@ -1,13 +1,12 @@
-// import './App.css'
-import Chart from './Chart'
+import "./App.css";
+import Chart from "./Chart";
 
 function App() {
-
   return (
     <div className="App">
-        <Chart width={500} height={500}/>
+      <Chart />
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
