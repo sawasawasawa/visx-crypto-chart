@@ -1,9 +1,5 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { scaleTime, scaleLinear } from '@visx/scale';
-interface Apple {
-    date: string;
-    close: number;
-}
 import { Brush } from '@visx/brush';
 import { Bounds } from '@visx/brush/lib/types';
 import BaseBrush, { BaseBrushState, UpdateBrush } from '@visx/brush/lib/BaseBrush';
@@ -14,17 +10,28 @@ import {max, extent, min} from 'd3-array';
 import * as d3 from 'd3';
 
 import AreaChart from './AreaChart';
+import Volumes from "./Volumes";
+import {useWindowSize} from "react-use-size";
 
 // Initialize some variables
 
-const getData = async () => {
-    return await d3.csv("../assets/SBT_DataVisualization/price_BTC.csv")
+interface Price {
+    date: string;
+    close: number;
 }
-const data = await getData()
-const stock = data.map(d=> ({
-    close: parseInt(d?.close || "0", 10),
-    date: new Date(d?.time_open || '2011-11-11').toISOString()
-}));
+const parsePriceData = async (path: string) => {
+    return (await d3.csv(path)) .map(d=> ({
+        close: parseInt(d?.close || "0", 10),
+        date: d.time_open
+    }))
+}
+
+const parseVolumeData = async (path: string) => {
+    return (await d3.csv(path))
+}
+const btcPrices = await parsePriceData("../assets/SBT_DataVisualization/price_BTC.csv")
+const btcVolumes = (await parseVolumeData("../assets/SBT_DataVisualization/buy_sell_volume_BTC.csv"))
+
 const brushMargin = { top: 10, bottom: 15, left: 50, right: 20 };
 const chartSeparation = 30;
 const PATTERN_ID = 'brush_pattern';
@@ -38,8 +45,8 @@ const selectedBrushStyle = {
 };
 
 // accessors
-const getDate = (d: Apple) => new Date(d?.date);
-const getStockValue = (d: Apple) => d?.close;
+const getDate = (d: Price) => new Date(d?.date);
+const getStockValue = (d: Price) => d?.close;
 
 export type BrushProps = {
     width: number;
@@ -50,8 +57,8 @@ export type BrushProps = {
 
 function Chart({
                         compact = false,
-                        width,
-                        height,
+                        // width,
+                        // height,
                         margin = {
                             top: 20,
                             left: 50,
@@ -60,19 +67,21 @@ function Chart({
                         },
                     }: BrushProps) {
     const brushRef = useRef<BaseBrush | null>(null);
-    const [filteredStock, setFilteredStock] = useState(stock);
-
+    const [filteredStock, setFilteredStock] = useState(btcPrices);
+    const windowSize = useWindowSize();
+    const width = windowSize.width
+    const height = windowSize.height - 50
     const onBrushChange = (domain: Bounds | null) => {
         if (!domain) return;
         const { x0, x1, y0, y1 } = domain;
-        const stockCopy = stock.filter((s) => {
+        const stockCopy = btcPrices.filter((s) => {
             const x = getDate(s).getTime();
             const y = getStockValue(s);
             return x > x0 && x < x1 && y > y0 && y < y1;
         });
         setFilteredStock(stockCopy);
     };
-
+console.log("_______ filteredStock.length", filteredStock.length)
     const innerHeight = height - margin.top - margin.bottom;
     const topChartBottomMargin = compact ? chartSeparation / 2 : chartSeparation + 10;
     const topChartHeight = 0.8 * innerHeight - topChartBottomMargin;
@@ -93,12 +102,11 @@ function Chart({
             }),
         [xMax, filteredStock],
     );
-    console.log("_______ filteredStock", filteredStock)
     const stockScale = useMemo(
         () =>
             scaleLinear<number>({
                 range: [yMax, 0],
-                domain: [min(filteredStock, getStockValue) * 0.95, max(filteredStock, getStockValue) || 0],
+                domain: [min(filteredStock, getStockValue) * 1, max(filteredStock, getStockValue) || 0],
                 nice: true,
             }),
         [yMax, filteredStock],
@@ -107,7 +115,7 @@ function Chart({
         () =>
             scaleTime<number>({
                 range: [0, xBrushMax],
-                domain: extent(stock, getDate) as [Date, Date],
+                domain: extent(btcPrices, getDate) as [Date, Date],
             }),
         [xBrushMax],
     );
@@ -115,16 +123,38 @@ function Chart({
         () =>
             scaleLinear({
                 range: [yBrushMax, 0],
-                domain: [0, max(stock, getStockValue) || 0],
+                domain: [min(btcPrices, getStockValue) || 0, max(btcPrices, getStockValue) || 0],
                 nice: true,
             }),
         [yBrushMax],
     );
+// Compute bins.
+    const thresholds = filteredStock.length
+    const x = d => d.close
+    const y = d => d.volume_buy
+    const X = d3.map(btcPrices, x);
+    const Y = d3.map(btcVolumes, y);
+    const I = d3.range(X.length);
+    const bins2 = d3.bin().thresholds(thresholds)(filteredStock.map(b=>b.close))
+    const volumesPerBin = bins2
+        .map(bin => {
+            const binItems = filteredStock.filter((p => {
+                const close = parseInt(p.close, 10)
+                return bin.x0 <= close && close < bin.x1
+            })).map(p => btcVolumes.find(v => v.time_executed === p.date))
 
+            return ({
+                x0: bin.x0,
+                x1: bin.x1,
+                totalSellVolume: d3.sum(binItems.map(item => item.volume_sell)),
+                totalBuyVolume: d3.sum(binItems.map(item => item.volume_buy))
+            });
+        })
+console.log("_______ volumesPerBin le", volumesPerBin.flatMap(b=>b).length)
     const initialBrushPosition = useMemo(
         () => ({
-            start: { x: brushDateScale(getDate(stock[50])) },
-            end: { x: brushDateScale(getDate(stock[100])) },
+            start: { x: brushDateScale(getDate(btcPrices[50])) },
+            end: { x: brushDateScale(getDate(btcPrices[100])) },
         }),
         [brushDateScale],
     );
@@ -132,7 +162,7 @@ function Chart({
     // event handlers
     const handleClearClick = () => {
         if (brushRef?.current) {
-            setFilteredStock(stock);
+            setFilteredStock(btcPrices);
             brushRef.current.reset();
         }
     };
@@ -158,6 +188,8 @@ function Chart({
         }
     };
 
+
+
     return (
         <div>
             <svg width={width} height={height}>
@@ -176,7 +208,7 @@ function Chart({
                 <AreaChart
                     hideBottomAxis
                     hideLeftAxis
-                    data={stock}
+                    data={btcPrices}
                     width={width}
                     yMax={yBrushMax}
                     xScale={brushDateScale}
@@ -205,14 +237,15 @@ function Chart({
                         brushDirection="horizontal"
                         initialBrushPosition={initialBrushPosition}
                         onChange={onBrushChange}
-                        onClick={() => setFilteredStock(stock)}
+                        onClick={() => setFilteredStock(btcPrices)}
                         selectedBoxStyle={selectedBrushStyle}
                         useWindowMoveEvents
                     />
+
                 </AreaChart>
+                <Volumes volumesPerBin={volumesPerBin} width={width/2} height={topChartHeight +8 + margin.top} parentYScale={stockScale}/>
             </svg>
-            <button onClick={handleClearClick}>Clear</button>&nbsp;
-            <button onClick={handleResetClick}>Reset</button>
+            <button onClick={handleClearClick}>Reset</button>&nbsp;
         </div>
     );
 }

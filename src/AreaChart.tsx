@@ -72,7 +72,7 @@ export default function AreaChart({
                 strokeWidth={1}
                 stroke="url(#gradient)"
                 fill="url(#gradient)"
-                curve={curveMonotoneX}
+                // curve={curveMonotoneX}
             />
             {!hideBottomAxis && (
                 <AxisBottom
