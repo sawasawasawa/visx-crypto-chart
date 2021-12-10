@@ -296,7 +296,7 @@ function Chart({
             onChange={(e) => setSupportsLeft(parseInt(e.target?.value))}
           />
 
-          <span></span>
+          <em style={{ marginTop: 10 }}>Buy+Sell {asset} volume</em>
         </div>
         <div
           onClick={() => {
@@ -322,6 +322,9 @@ function Chart({
             value={supportsRight}
             onChange={(e) => setSupportsRight(parseInt(e.target?.value))}
           />
+          <em style={{ marginTop: 10 }}>
+            From/To On Chain {asset} to USD volume
+          </em>
         </div>
       </div>
       <svg
