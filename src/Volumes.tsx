@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from "react";
 import { BarStackHorizontal } from "@visx/shape";
 import { Group } from "@visx/group";

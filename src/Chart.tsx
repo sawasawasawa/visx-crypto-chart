@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useRef, useState, useMemo } from "react";
 import { scaleTime, scaleLinear } from "@visx/scale";
 import { Brush } from "@visx/brush";
@@ -17,36 +18,12 @@ import AreaChart from "./AreaChart";
 import Volumes from "./Volumes";
 import { useWindowSize } from "react-use-size";
 import VolumesOnChain from "./VolumesOnChain";
+import { Supports } from "./Supports";
 
 interface Price {
   date: string;
   close: number;
 }
-const parsePriceData = async (path: string) => {
-  return (await d3.csv(path)).map((d) => ({
-    close: parseInt(d?.close || "0", 10),
-    date: d.time_open,
-  }));
-};
-
-const parseVolumeData = async (path: string) => {
-  return await d3.csv(path);
-};
-const btcPrices = await parsePriceData(
-  "../assets/SBT_DataVisualization/price_BTC.csv"
-);
-const ethPrices = await parsePriceData(
-  "../assets/SBT_DataVisualization/price_ETH.csv"
-);
-const btcVolumes = await parseVolumeData(
-  "../assets/SBT_DataVisualization/buy_sell_volume_BTC.csv"
-);
-const ethVolumes = await parseVolumeData(
-  "../assets/SBT_DataVisualization/buy_sell_volume_ETH.csv"
-);
-const onChainVolumes = await parseVolumeData(
-  "../assets/SBT_DataVisualization/on_chain_ETH_BTC.csv"
-);
 
 const brushMargin = { top: 10, bottom: 15, left: 50, right: 20 };
 const chartSeparation = 30;
@@ -73,6 +50,11 @@ export type BrushProps = {
 const defaultAsset = "BTC";
 
 function Chart({
+  btcPrices,
+  ethPrices,
+  btcVolumes,
+  ethVolumes,
+  onChainVolumes,
   compact = false,
   margin = {
     top: 120,
@@ -81,6 +63,8 @@ function Chart({
     right: 20,
   },
 }: BrushProps) {
+  console.log("___2____ btcPrices", btcPrices);
+  // console.log("_______ btcVolumes", btcVolumes);
   const brushRef = useRef<BaseBrush | null>(null);
   const [asset, setAsset] = useState(defaultAsset);
   const prices = asset === "BTC" ? btcPrices : ethPrices;
@@ -158,10 +142,11 @@ function Chart({
 
   // Compute bins.
   const thresholds = filteredStock.length;
-  const bins2 = d3.bin().thresholds(thresholds)(
+
+  const bins = d3.bin().thresholds(thresholds)(
     filteredStock.map((b) => b.close)
   );
-  const volumesPerBin = bins2.map((bin) => {
+  const volumesPerBin = bins.map((bin) => {
     const binItems = filteredStock
       .filter((p) => {
         const close = parseInt(p.close, 10);
@@ -189,24 +174,7 @@ function Chart({
     ([date, entries]) => ({ date, entries })
   );
 
-  const Supports = ({ data, count = 1, color = "white", y = 0 }) =>
-    data
-      .slice(0, count)
-      .map((d, i) => (
-        <line
-          key={i}
-          x1={margin.right + 30}
-          y1={y + margin.top + stockScale(d.x1)}
-          y2={y + margin.top + stockScale(d.x1)}
-          x2={margin.right + 30 + width - margin.right - margin.left}
-          fill={color}
-          height={2}
-          stroke={color}
-          strokeDasharray={5}
-        />
-      ));
-
-  const onChainVolumesPerBin = bins2.map((bin) => {
+  const onChainVolumesPerBin = bins.map((bin) => {
     const binItems = dailyVolumes
       .filter((p) => {
         const dailyClose =
@@ -296,7 +264,10 @@ function Chart({
             onChange={(e) => setSupportsLeft(parseInt(e.target?.value))}
           />
 
-          <em style={{ marginTop: 10 }}>Buy+Sell {asset} volume</em>
+          <em style={{ marginTop: 10 }}>
+            <span style={{ color: "green" }}>Buy </span>/
+            <span style={{ color: "red" }}> Sell</span> {asset} volume
+          </em>
         </div>
         <div
           onClick={() => {
@@ -323,7 +294,9 @@ function Chart({
             onChange={(e) => setSupportsRight(parseInt(e.target?.value))}
           />
           <em style={{ marginTop: 10 }}>
-            From/To On Chain {asset} to USD volume
+            <span style={{ color: "red" }}>From </span>/
+            <span style={{ color: "green" }}> To </span>
+            Chain {asset} volume
           </em>
         </div>
       </div>
@@ -404,14 +377,16 @@ function Chart({
           parentYScale={stockScale}
         />
         <VolumesOnChain
-          xPosition={width / 2 + 40}
+          xPosition={(width + margin.left) / 2}
           data={onChainVolumesPerBin}
           keys={["totalToBtc", "totalFromBtc"]}
-          width={width / 2}
+          width={(width + margin.left + margin.right) / 2}
           height={topChartHeight + 8 + margin.top}
           parentYScale={stockScale}
         />
         <Supports
+          margin={margin}
+          yScale={stockScale}
           data={sortedVolumes}
           count={supportsLeft}
           width={width}
@@ -420,6 +395,8 @@ function Chart({
           x={0}
         />
         <Supports
+          margin={margin}
+          yScale={stockScale}
           data={sortedOnChainVolumes}
           count={supportsRight}
           width={width}

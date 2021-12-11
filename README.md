@@ -1,5 +1,10 @@
-TODO
+Demo example of asset price chart combined with a tool to add support lines based on trading volumes.
 
-- [ ] on chain volume btc chart
-- [ ] enable switching to eth
-- slider to generate dashed support lines, based on each volume
+
+[DEMO AVAILABLE HERE](https://swissblock.surge.sh/)
+
+Stack:
+- React (TypeScript)
+- d3.js - calculations
+- visx - design primitives
+- vite - bundler
